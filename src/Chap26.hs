@@ -46,3 +46,31 @@ eitherT l r = cata . runEitherT
     cata m = do
       base <- m
       either l r base
+
+newtype ReaderT r m a = ReaderT {runReaderT :: r -> m a}
+
+instance (Functor m) => Functor (ReaderT r m) where
+  fmap f r =
+    let base = runReaderT r
+     in -- need m a -> m b
+        ReaderT $ fmap (fmap f) base
+
+instance (Applicative app) => Applicative (ReaderT r app) where
+  pure a = ReaderT (\r -> pure a)
+  appF <*> app =
+    ReaderT
+      ( \r ->
+          let baseF = runReaderT appF r
+              base = runReaderT app r
+           in baseF <*> base
+      )
+
+-- ReaderT r m b :: ReaderT (\r -> m b)
+instance (Monad m) => Monad (ReaderT r m) where
+  return = pure
+  ma >>= amf =
+    let baseMa = runReaderT ma
+        baseF = runReaderT <$> amf
+        test = (baseF <$>) <$> baseMa
+     in ReaderT (\r -> test r >>= \x -> x r)
+
