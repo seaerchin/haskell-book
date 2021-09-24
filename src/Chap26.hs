@@ -3,8 +3,11 @@
 
 module Chap26 where
 
+import Data.Bifunctor (first)
+
 -- m wraps around the either monad
 -- a is not part of the structure
+
 newtype EitherT e m a = EitherT {runEitherT :: m (Either e a)}
 
 instance Functor m => Functor (EitherT e m) where
@@ -74,3 +77,19 @@ instance (Monad m) => Monad (ReaderT r m) where
         test = (baseF <$>) <$> baseMa
      in ReaderT (\r -> test r >>= \x -> x r)
 
+-- StateT
+newtype StateT s m a = StateT {runStateT :: s -> m (a, s)}
+
+instance (Functor m) => Functor (StateT s m) where
+  -- i derived this from the base one i wrote but idk what this actually means lmao
+  fmap f m = StateT $ (first f <$>) <$> runStateT m
+
+instance (Monad m) => Applicative (StateT s m) where
+  pure a = StateT (\s -> pure (a, s))
+  appF <*> app =
+    StateT
+      ( \s -> do
+          f <- runStateT appF s
+          b <- runStateT app s
+          return $ first (fst f) b
+      )
