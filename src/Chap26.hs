@@ -3,15 +3,18 @@
 
 module Chap26 where
 
-import Data.Bifunctor (first)
-
 -- m wraps around the either monad
 -- a is not part of the structure
+
+import Control.Monad.Trans.Except
+import Control.Monad.Trans.Maybe
+import Data.Bifunctor (first)
+import Data.Functor.Identity
 
 newtype EitherT e m a = EitherT {runEitherT :: m (Either e a)}
 
 instance Functor m => Functor (EitherT e m) where
-  fmap f e@(EitherT ema) = do
+  fmap f e@(EitherT ema) =
     f <$> e
 
 instance Applicative m => Applicative (EitherT e m) where
@@ -36,7 +39,7 @@ instance Monad m => Monad (EitherT e m) where
 swapEitherT :: (Functor m) => EitherT e m a -> EitherT a m e
 swapEitherT = EitherT . f . runEitherT
   where
-    f mea = do
+    f mea =
       swapEither <$> mea
 
 swapEither :: Either e a -> Either a e
@@ -92,4 +95,17 @@ instance (Monad m) => Applicative (StateT s m) where
           f <- runStateT appF s
           b <- runStateT app s
           return $ first (fst f) b
+      )
+
+-- wrapping values
+embedded :: MaybeT (ExceptT String (ReaderT () IO)) Int
+embedded =
+  MaybeT $
+    ExceptT
+      ( ReaderT
+          ( const $
+              return $
+                Right
+                  (Just 1)
+          )
       )

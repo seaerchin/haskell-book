@@ -34,6 +34,7 @@ library
       src
   build-depends:
       base >=4.7 && <5
+    , transformers
   default-language: Haskell2010
 
 executable book-exe
@@ -46,6 +47,7 @@ executable book-exe
   build-depends:
       base >=4.7 && <5
     , book
+    , transformers
   default-language: Haskell2010
 
 test-suite book-test
@@ -59,4 +61,5 @@ test-suite book-test
   build-depends:
       base >=4.7 && <5
     , book
+    , transformers
   default-language: Haskell2010
