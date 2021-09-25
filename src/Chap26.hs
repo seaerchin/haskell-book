@@ -99,6 +99,13 @@ instance (Monad m) => Applicative (StateT s m) where
           return $ first (fst f) b
       )
 
+instance (Monad m) => Monad (StateT s m) where
+  return = pure
+  tma >>= ftma =
+    StateT
+      ( \s -> runStateT tma s >>= ((\f -> f s) . runStateT . ftma) . fst
+      )
+
 -- redefining the transformer here to allow us to write our own instances for monadIO
 newtype MaybeT m a = MaybeT {runMaybeT :: m (Maybe a)}
 
@@ -172,4 +179,7 @@ instance (MonadIO m) => MonadIO (MaybeT m) where
 -- (\x -> MaybeT $ Just <$> x) . liftIO
 
 instance (MonadIO m) => MonadIO (ReaderT r m) where
+  liftIO = lift . liftIO
+
+instance (MonadIO m) => MonadIO (StateT s m) where
   liftIO = lift . liftIO
