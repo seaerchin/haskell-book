@@ -156,6 +156,9 @@ instance MonadTrans (StateT s) where
 instance MonadTrans MaybeT where
   lift = MaybeT . fmap Just
 
+instance MonadTrans (ReaderT r) where
+  lift m = ReaderT (const m)
+
 -- lifting using monadIO; given that we have some structure with IO capabilities, lift an IO action into that structure.
 instance (MonadIO m) => MonadIO (EitherT e m) where
   -- inject an io action into the structure encapsulated by the transformer
@@ -167,3 +170,6 @@ instance (MonadIO m) => MonadIO (MaybeT m) where
 -- utilize monad m's liftIO method to lift the action into our external monad
 -- the lambad is equivalent to lift because we are just lifting the external monad into MaybeT
 -- (\x -> MaybeT $ Just <$> x) . liftIO
+
+instance (MonadIO m) => MonadIO (ReaderT r m) where
+  liftIO = lift . liftIO
