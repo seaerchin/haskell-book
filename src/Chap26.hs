@@ -6,6 +6,7 @@ module Chap26 where
 -- m wraps around the either monad
 -- a is not part of the structure
 
+import Control.Monad.Trans.Class
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Maybe
 import Data.Bifunctor (first)
@@ -109,3 +110,12 @@ embedded =
                   (Just 1)
           )
       )
+
+-- lifting using monadTrans (lifting 1 layer at a time)
+instance MonadTrans (EitherT e) where
+  lift m = do
+    EitherT $ Right <$> m
+
+instance MonadTrans (StateT s) where
+  -- we must inject the monad into the greater context of the transformer
+  lift m = StateT (\s -> (\a -> (a, s)) <$> m)
