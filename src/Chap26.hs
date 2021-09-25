@@ -6,9 +6,10 @@ module Chap26 where
 -- m wraps around the either monad
 -- a is not part of the structure
 
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Except
-import Control.Monad.Trans.Maybe
+import Control.Monad.Trans.Identity (IdentityT)
 import Data.Bifunctor (first)
 import Data.Functor.Identity
 
@@ -98,6 +99,38 @@ instance (Monad m) => Applicative (StateT s m) where
           return $ first (fst f) b
       )
 
+-- redefining the transformer here to allow us to write our own instances for monadIO
+newtype MaybeT m a = MaybeT {runMaybeT :: m (Maybe a)}
+
+instance (Functor m) => Functor (MaybeT m) where
+  fmap f m =
+    let b = runMaybeT m
+     in MaybeT $ (fmap . fmap) f b
+
+instance (Applicative m) => Applicative (MaybeT m) where
+  pure = MaybeT . pure . Just
+  af <*> a =
+    let mf = runMaybeT af
+        ma = runMaybeT a
+     in -- we need to remove 1 layer of structure (monad m)
+        -- this is done using fmap
+        -- next, functions embedded in the structure (Maybe) need to communicate values in the structure (Maybe)
+        -- this is done using <*>
+        MaybeT $ fmap (<*>) mf <*> ma
+
+instance (Monad m) => Monad (MaybeT m) where
+  return = pure
+  maybeT >>= mf =
+    let m = runMaybeT maybeT
+        -- type i want is s :: m (Maybe b)
+        s = (fmap . fmap) mf m
+     in MaybeT $
+          -- unwrap s
+          -- pattern match on s and act accordingly
+          s >>= \case
+            Nothing -> return Nothing
+            Just mt -> runMaybeT mt
+
 -- wrapping values
 embedded :: MaybeT (ExceptT String (ReaderT () IO)) Int
 embedded =
@@ -119,3 +152,18 @@ instance MonadTrans (EitherT e) where
 instance MonadTrans (StateT s) where
   -- we must inject the monad into the greater context of the transformer
   lift m = StateT (\s -> (\a -> (a, s)) <$> m)
+
+instance MonadTrans MaybeT where
+  lift = MaybeT . fmap Just
+
+-- lifting using monadIO; given that we have some structure with IO capabilities, lift an IO action into that structure.
+instance (MonadIO m) => MonadIO (EitherT e m) where
+  -- inject an io action into the structure encapsulated by the transformer
+  liftIO = lift . liftIO
+
+instance (MonadIO m) => MonadIO (MaybeT m) where
+  liftIO = lift . liftIO
+
+-- utilize monad m's liftIO method to lift the action into our external monad
+-- the lambad is equivalent to lift because we are just lifting the external monad into MaybeT
+-- (\x -> MaybeT $ Just <$> x) . liftIO
