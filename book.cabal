@@ -27,6 +27,7 @@ library
   exposed-modules:
       Chap25
       Chap26
+      Chap28
       Lib
   other-modules:
       Paths_book
