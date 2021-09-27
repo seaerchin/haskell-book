@@ -1,18 +1,23 @@
 {-# LANGUAGE ApplicativeDo #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 
 module Chap26 where
 
--- m wraps around the either monad
--- a is not part of the structure
-
+import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Except
 import Control.Monad.Trans.Identity (IdentityT)
+import qualified Control.Monad.Trans.Maybe as M
+import qualified Control.Monad.Trans.State.Lazy as S
 import Data.Bifunctor (first)
 import Data.Functor.Identity
+import Debug.Trace (trace)
+import System.Random.Stateful
 
+-- m wraps around the either monad
+-- a is not part of the structure
 newtype EitherT e m a = EitherT {runEitherT :: m (Either e a)}
 
 instance Functor m => Functor (EitherT e m) where
@@ -85,6 +90,15 @@ instance (Monad m) => Monad (ReaderT r m) where
 -- StateT
 newtype StateT s m a = StateT {runStateT :: s -> m (a, s)}
 
+state :: Monad m => (s -> (a, s)) -> StateT s m a
+state f = StateT $ return . f
+
+get :: Monad m => StateT s m s
+get = state (\s -> (s, s))
+
+put :: Monad m => s -> StateT s m ()
+put s = state (const ((), s))
+
 instance (Functor m) => Functor (StateT s m) where
   -- i derived this from the base one i wrote but idk what this actually means lmao
   fmap f m = StateT $ (first f <$>) <$> runStateT m
@@ -95,15 +109,18 @@ instance (Monad m) => Applicative (StateT s m) where
     StateT
       ( \s -> do
           f <- runStateT appF s
-          b <- runStateT app s
-          return $ first (fst f) b
+          as <- runStateT app (snd f)
+          let b = fst f $ fst as
+          return (b, snd as)
       )
 
 instance (Monad m) => Monad (StateT s m) where
   return = pure
   tma >>= ftma =
     StateT
-      ( \s -> runStateT tma s >>= ((\f -> f s) . runStateT . ftma) . fst
+      ( \x -> do
+          initial <- runStateT tma x
+          runStateT (ftma . fst $ initial) $ snd initial
       )
 
 -- redefining the transformer here to allow us to write our own instances for monadIO
@@ -183,3 +200,78 @@ instance (MonadIO m) => MonadIO (ReaderT r m) where
 
 instance (MonadIO m) => MonadIO (StateT s m) where
   liftIO = lift . liftIO
+
+rDec :: Num a => ReaderT a Identity a
+rDec = ReaderT $ return . (+ (-1))
+
+rShow :: Show a => ReaderT a Identity String
+rShow = ReaderT $ return . show
+
+rPrintAndInc :: (Num a, Show a) => ReaderT a IO a
+rPrintAndInc =
+  ReaderT
+    ( \x -> do
+        print ("HI: " ++ show x)
+        return $ x + 1
+    )
+
+sPrintIncAccum :: (Num a, Show a) => StateT a IO String
+sPrintIncAccum = do
+  base <- get
+  let x = show base
+  liftIO $ print ("HI: " ++ x)
+  put (base + 2)
+  return x
+
+isValid :: String -> Bool
+isValid v = '!' `elem` v
+
+maybeExcite :: MaybeT IO String
+maybeExcite = do
+  v <- liftIO getLine
+  Chap26.guard $ isValid v
+  return v
+
+guard :: (Monad m) => Bool -> MaybeT m Bool
+guard pred = if pred then lift $ return pred else MaybeT $ return Nothing
+
+doExcite :: IO ()
+doExcite = do
+  putStrLn "say something excite!"
+  excite <- runMaybeT maybeExcite
+  case excite of
+    Nothing -> putStrLn "MOAR EXCITE"
+    Just e -> putStrLn ("Good, was very excite: " ++ e)
+
+-- also evaluated twice??
+guardInput :: MaybeT IO Int
+guardInput = do
+  input <- liftIO getLine
+  liftIO $ print "within maybeT"
+  let int = read input :: Int
+  Chap26.guard ((int < 6) && (int > 0))
+  return int
+
+test :: IO ()
+test = do
+  a <- runMaybeT $ runStateT morra []
+  putStrLn "wutface"
+  return ()
+
+morra :: StateT [(Int, Int)] (MaybeT IO) ()
+morra = forever $ do
+  liftIO $ putStrLn "Input your options"
+  input <- lift guardInput
+  compInt <- liftIO $ randomRIO (0, 5)
+  appendState (input, compInt)
+  cur <- get
+  liftIO $ putStrLn ("Player: " ++ show input)
+  liftIO $ putStrLn ("Computer: " ++ show compInt)
+  liftIO $ print cur
+  return ()
+
+appendState :: (MonadIO m) => s -> StateT [s] m ()
+appendState s = do
+  base <- get
+  liftIO $ print "here"
+  put (base ++ [s])
