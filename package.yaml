@@ -23,7 +23,11 @@ dependencies:
 - base >= 4.7 && < 5
 - transformers 
 - random
-
+- network
+- text
+- sqlite-simple
+- bytestring
+- raw-strings-qq
 
 library:
   source-dirs: src
