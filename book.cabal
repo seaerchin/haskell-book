@@ -28,6 +28,7 @@ library
       Chap25
       Chap26
       Chap28
+      Chap30
       Lib
   other-modules:
       Paths_book
