@@ -57,6 +57,8 @@ extra-deps:
 - integer-logarithms-1.0.3.1@sha256:888fb6c4fbd79ed2e8f8b94b61bccac25f7fab2b13b32b496e86828bc60b17cf,3184
 - primitive-0.7.2.0@sha256:d7c3635e83ae160129cdfe2be4092ab6389199d73a2c29adf904124dbcfe6100,2660
 - raw-strings-qq-1.1@sha256:3ea0f14f036649e3576749aef0db4dd0b1102c5331f2e0e2551250e2030ce669,1467
+- extra-1.7.10@sha256:e384751317577554f873812358fab022da02aa9a286c9341308fac83f4d766c5,2691
+- clock-0.8.2@sha256:473ffd59765cc67634bdc55b63c699a85addf3a024089073ec2a862881e83e2a,4313
 
 # Override default flag values for local packages and extra-deps
 # flags: {}

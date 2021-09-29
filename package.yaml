@@ -28,6 +28,7 @@ dependencies:
 - sqlite-simple
 - bytestring
 - raw-strings-qq
+- extra 
 
 library:
   source-dirs: src

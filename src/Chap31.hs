@@ -7,12 +7,16 @@ module Chap31 where
 
 import Control.Exception
 import Control.Monad (forever)
+import Control.Monad.IO.Class
+import Control.Monad.Trans.Reader
+import Control.Monad.Trans.State
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as BS
 import Data.List (intersperse)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Text.Encoding (decodeUtf8, encodeUtf8)
+import Data.Tuple.Extra
 import Data.Typeable
 import Database.SQLite.Simple hiding (bind, close)
 import qualified Database.SQLite.Simple as SQLite
@@ -58,6 +62,20 @@ data User = User
   }
   deriving (Eq, Show)
 
+type SocketInfo = (Connection, Socket)
+
+-- realsocket describes a (connection, socket) pair rooted in the IO monad
+-- that is, the type is able to interact with the real world meaningfully
+type RealSocket a = ReaderT SocketInfo IO a
+
+getConnection :: RealSocket Connection
+getConnection = do
+  fst <$> ask
+
+getSocket :: RealSocket Socket
+getSocket = do
+  snd <$> ask
+
 instance FromRow User where fromRow = User <$> field <*> field <*> field <*> field <*> field <*> field
 
 instance ToRow User where toRow (User id_ username shell homeDir realName phone) = toRow (id_, username, shell, homeDir, realName, phone)
@@ -82,13 +100,14 @@ instance Exception DuplicateData
 
 type UserRow = (Null, Text, Text, Text, Text, Text)
 
-getUser :: Connection -> Text -> IO (Maybe User)
-getUser conn username = do
-  results <- query conn getUserQuery (Only username)
+getUser :: Text -> RealSocket (Maybe User)
+getUser username = do
+  conn <- getConnection
+  results <- liftIO $ query conn getUserQuery (Only username)
   case results of
     [] -> return Nothing
     [user] -> return $ Just user
-    _ -> throwIO DuplicateData
+    _ -> liftIO $ throwIO DuplicateData
 
 createDatabase :: IO ()
 createDatabase = do
@@ -109,39 +128,45 @@ createDatabase = do
         "555-123-4567"
       )
 
-returnUsers :: Connection -> Socket -> IO ()
-returnUsers dbConn soc = do
-  rows <- query_ dbConn allUsers
+returnUsers :: RealSocket ()
+returnUsers = do
+  soc <- getSocket
+  dbConn <- getConnection
+  rows <- liftIO $ query_ dbConn allUsers
   let usernames = map username rows
       newlineSeparated = T.concat $ intersperse "\n" usernames
-  sendAll soc (encodeUtf8 newlineSeparated)
+  liftIO $ sendAll soc (encodeUtf8 newlineSeparated)
 
 formatUser :: User -> ByteString
 formatUser (User _ username shell homeDir realName _) = BS.concat ["Login: ", e username, "\t\t\t\t", "Name: ", e realName, "\n", "Directory: ", e homeDir, "\t\t\t", "Shell: ", e shell, "\n"]
   where
     e = encodeUtf8
 
-returnUser :: Connection -> Socket -> Text -> IO ()
-returnUser dbConn soc username = do
-  maybeUser <- getUser dbConn (T.strip username)
+returnUser :: Text -> RealSocket ()
+returnUser username = do
+  soc <- getSocket
+  dbConn <- getConnection
+  maybeUser <- getUser (T.strip username)
   case maybeUser of
     Nothing -> do
-      putStrLn ("Couldn't find matching user for username: " ++ show username)
+      liftIO $ putStrLn ("Couldn't find matching user for username: " ++ show username)
       return ()
-    Just user -> sendAll soc (formatUser user)
+    Just user -> liftIO $ sendAll soc (formatUser user)
 
-handleQuery :: Connection -> Socket -> IO ()
-handleQuery dbConn soc = do
-  msg <- recv soc 1024
+handleQuery :: RealSocket ()
+handleQuery = do
+  soc <- getSocket
+  msg <- liftIO $ recv soc 1024
   case msg of
-    "\r\n" -> returnUsers dbConn soc
-    name -> returnUser dbConn soc (decodeUtf8 name)
+    "\r\n" -> returnUsers
+    name -> returnUser (decodeUtf8 name)
 
 handleQueries :: Connection -> Socket -> IO ()
-handleQueries dbConn sock = forever $ do
+handleQueries conn sock = forever $ do
   (soc, _) <- accept sock
+
   putStrLn "Got connection, handling query"
-  handleQuery dbConn soc
+  runReaderT handleQuery (conn, soc)
   close soc
 
 m :: IO ()
@@ -155,5 +180,3 @@ m = withSocketsDo $ do
   handleQueries conn sock
   SQLite.close conn
   close sock
-
-type SocketConn = Connection -> Socket
